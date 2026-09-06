@@ -11,7 +11,12 @@
       "start": ["go", "run", "."],
       "port": 8080,
       "health": { "path": "/healthz", "expect_status": [200] },
-      "env": {}
+      "env": {
+        "API_KEY": {
+          "external": true,
+          "degraded_without": "all /flags routes answer 401"
+        }
+      }
     }
   ]
 }
