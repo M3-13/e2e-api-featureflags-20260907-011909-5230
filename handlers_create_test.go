@@ -116,3 +116,83 @@ func TestCreateFlagInvalidJSON(t *testing.T) {
 		t.Fatalf("expected status 400, got %d", rr.Code)
 	}
 }
+
+func TestCreateFlagRolloutPercentTooHigh(t *testing.T) {
+	s := newTestServer()
+
+	req := httptest.NewRequest(http.MethodPost, "/flags", strings.NewReader(`{"key":"neu","enabled":true,"rollout_percent":101}`))
+	rr := httptest.NewRecorder()
+	s.CreateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}
+
+func TestCreateFlagRolloutPercentNegative(t *testing.T) {
+	s := newTestServer()
+
+	req := httptest.NewRequest(http.MethodPost, "/flags", strings.NewReader(`{"key":"neu","enabled":true,"rollout_percent":-1}`))
+	rr := httptest.NewRecorder()
+	s.CreateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}
+
+func TestCreateFlagInvalidKeySlash(t *testing.T) {
+	s := newTestServer()
+
+	req := httptest.NewRequest(http.MethodPost, "/flags", strings.NewReader(`{"key":"bad/key","enabled":true}`))
+	rr := httptest.NewRecorder()
+	s.CreateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}
+
+func TestCreateFlagInvalidKeyCharacters(t *testing.T) {
+	s := newTestServer()
+
+	req := httptest.NewRequest(http.MethodPost, "/flags", strings.NewReader(`{"key":"bad key!","enabled":true}`))
+	rr := httptest.NewRecorder()
+	s.CreateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}

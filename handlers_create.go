@@ -4,7 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"regexp"
 )
+
+var keyPattern = regexp.MustCompile(`^[A-Za-z0-9._-]+$`)
 
 // CreateHandler handles POST /flags.
 func (s *Server) CreateHandler(w http.ResponseWriter, r *http.Request) {
@@ -20,6 +23,20 @@ func (s *Server) CreateHandler(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "key is required"})
+		return
+	}
+
+	if len(f.Key) > 128 || !keyPattern.MatchString(f.Key) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid key"})
+		return
+	}
+
+	if f.RolloutPercent < 0 || f.RolloutPercent > 100 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "rollout_percent must be between 0 and 100"})
 		return
 	}
 

@@ -60,3 +60,57 @@ func TestUpdateHandlerNotFound(t *testing.T) {
 		t.Fatalf("expected status 404, got %d", rr.Code)
 	}
 }
+
+func TestUpdateHandlerRolloutPercentTooHigh(t *testing.T) {
+	s := NewStore()
+	s.mu.Lock()
+	s.flags["myflag"] = Flag{Key: "myflag", Enabled: false, Description: "old", RolloutPercent: 0}
+	s.mu.Unlock()
+	server := NewServer(s)
+
+	body := `{"enabled":true,"rollout_percent":101}`
+	req := httptest.NewRequest(http.MethodPut, "/flags/myflag", strings.NewReader(body))
+	req.SetPathValue("key", "myflag")
+	rr := httptest.NewRecorder()
+
+	server.UpdateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}
+
+func TestUpdateHandlerRolloutPercentNegative(t *testing.T) {
+	s := NewStore()
+	s.mu.Lock()
+	s.flags["myflag"] = Flag{Key: "myflag", Enabled: false, Description: "old", RolloutPercent: 0}
+	s.mu.Unlock()
+	server := NewServer(s)
+
+	body := `{"enabled":true,"rollout_percent":-1}`
+	req := httptest.NewRequest(http.MethodPut, "/flags/myflag", strings.NewReader(body))
+	req.SetPathValue("key", "myflag")
+	rr := httptest.NewRecorder()
+
+	server.UpdateHandler(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected status 400, got %d", rr.Code)
+	}
+
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode error body: %v", err)
+	}
+	if errBody["error"] == "" {
+		t.Fatalf("expected error field in response, got %v", errBody)
+	}
+}

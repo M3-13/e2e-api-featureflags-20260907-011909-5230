@@ -25,6 +25,13 @@ func (s *Server) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if body.RolloutPercent < 0 || body.RolloutPercent > 100 {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "rollout_percent must be between 0 and 100"})
+		return
+	}
+
 	updated, err := s.store.Update(key, Flag{
 		Key:            key,
 		Enabled:        body.Enabled,
