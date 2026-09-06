@@ -81,6 +81,32 @@ func TestRecoverReturns500JSON(t *testing.T) {
 	}
 }
 
+func TestRecoverLogOmitsPanicDetails(t *testing.T) {
+	var buf bytes.Buffer
+	old := log.Writer()
+	log.SetOutput(&buf)
+	defer log.SetOutput(old)
+	oldFlags := log.Flags()
+	log.SetFlags(0)
+	defer log.SetFlags(oldFlags)
+
+	handler := Recover(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		panic("secret panic value 42")
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/flags", nil)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	out := buf.String()
+	if !strings.Contains(out, "panic recovered") {
+		t.Fatalf("expected 'panic recovered' in log, got %q", out)
+	}
+	if strings.Contains(out, "secret panic value 42") {
+		t.Fatalf("log leaks panic details: %q", out)
+	}
+}
+
 func TestBodyLimitRejectsLargeContentLength(t *testing.T) {
 	handler := BodyLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
