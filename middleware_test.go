@@ -119,6 +119,71 @@ func TestBodyLimitAllowsSmallBody(t *testing.T) {
 	}
 }
 
+func TestBodyLimitRejectsOversizedChunkedBody(t *testing.T) {
+	handler := BodyLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	body := bytes.Repeat([]byte("a"), maxBodyBytes+1)
+	req := httptest.NewRequest(http.MethodPost, "/flags", bytes.NewReader(body))
+	req.ContentLength = -1 // unknown Content-Length (chunked)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("expected status 413, got %d", rr.Code)
+	}
+	var errBody map[string]string
+	if err := json.NewDecoder(rr.Body).Decode(&errBody); err != nil {
+		t.Fatalf("failed to decode body: %v", err)
+	}
+	if _, ok := errBody["error"]; !ok {
+		t.Fatalf("expected error key, got %v", errBody)
+	}
+}
+
+func TestBodyLimitAcceptsBodyAtLimit(t *testing.T) {
+	handler := BodyLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	body := bytes.Repeat([]byte("a"), maxBodyBytes)
+	req := httptest.NewRequest(http.MethodPost, "/flags", bytes.NewReader(body))
+	req.ContentLength = -1 // unknown Content-Length (chunked)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200 for body at limit, got %d", rr.Code)
+	}
+}
+
+func TestBodyLimitPreservesBodyForHandler(t *testing.T) {
+	handler := BodyLimit(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Fatalf("handler read error: %v", err)
+		}
+		w.Write(got)
+	}))
+
+	payload := `{"key":"myflag"}`
+	req := httptest.NewRequest(http.MethodPost, "/flags", strings.NewReader(payload))
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d", rr.Code)
+	}
+	if rr.Body.String() != payload {
+		t.Fatalf("body not preserved: got %q want %q", rr.Body.String(), payload)
+	}
+}
+
 func TestContentTypeRejectsNonJSON(t *testing.T) {
 	handler := ContentType(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

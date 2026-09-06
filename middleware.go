@@ -1,11 +1,17 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"log"
 	"net/http"
 	"strings"
 )
+
+// maxBodyBytes is the maximum accepted request body size (1 MB).
+const maxBodyBytes = 1 << 20
 
 // statusRecorder wraps an http.ResponseWriter to capture the status code.
 type statusRecorder struct {
@@ -49,17 +55,40 @@ func Recover(next http.Handler) http.Handler {
 	})
 }
 
-// BodyLimit rejects POST and PUT requests whose Content-Length exceeds 1 MB
-// with 413, and caps the body read via http.MaxBytesReader as a fallback.
+// BodyLimit rejects POST and PUT requests whose body exceeds 1 MB with 413,
+// and caps the body read via http.MaxBytesReader as a fallback. It detects
+// oversized bodies even when Content-Length is unknown (e.g. chunked) by
+// reading up to the limit and translating the MaxBytesReader error into a 413.
 func BodyLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.Method == http.MethodPut {
-			if r.ContentLength > 1<<20 {
+		if r.Method != http.MethodPost && r.Method != http.MethodPut {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		if r.ContentLength > maxBodyBytes {
+			writeJSONError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+
+		// Allow reading one byte past the limit so that an exactly-1 MB body
+		// reads cleanly to EOF, while anything larger raises a MaxBytesError.
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes+1)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
 				writeJSONError(w, http.StatusRequestEntityTooLarge, "request body too large")
 				return
 			}
-			r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
+			writeJSONError(w, http.StatusBadRequest, "invalid request body")
+			return
 		}
+		if len(body) > maxBodyBytes {
+			writeJSONError(w, http.StatusRequestEntityTooLarge, "request body too large")
+			return
+		}
+		r.Body = io.NopCloser(bytes.NewReader(body))
 		next.ServeHTTP(w, r)
 	})
 }
